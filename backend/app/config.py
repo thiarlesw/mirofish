@@ -74,7 +74,5 @@ class Config:
         errors = []
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY is not set")
-        if not cls.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY is not set")
         return errors
 
