@@ -4,12 +4,18 @@ Expõe as funcionalidades do MiroFish como tools MCP para Claude e outros client
 """
 import os
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 import httpx
 from typing import Optional
 
 MIROFISH_BASE_URL = os.environ.get("MIROFISH_BASE_URL", "http://localhost:5001")
 
-mcp = FastMCP("MiroFish")
+mcp = FastMCP(
+    "MiroFish",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
+)
 
 
 # ============== Projetos ==============
