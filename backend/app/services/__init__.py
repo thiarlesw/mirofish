@@ -1,11 +1,11 @@
 """
-业务服务模块
+Business services.
 """
 
 from .ontology_generator import OntologyGenerator
 from .graph_builder import GraphBuilderService
 from .text_processor import TextProcessor
-from .graphiti_entity_reader import GraphitiEntityReader, EntityNode, FilteredEntities
+from .zep_entity_reader import ZepEntityReader, EntityNode, FilteredEntities
 from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_manager import SimulationManager, SimulationState, SimulationStatus
 from .simulation_config_generator import (
@@ -23,9 +23,9 @@ from .simulation_runner import (
     AgentAction,
     RoundSummary
 )
-from .graphiti_memory_updater import (
-    GraphitiMemoryUpdater,
-    GraphitiMemoryManager,
+from .zep_graph_memory_updater import (
+    ZepGraphMemoryUpdater,
+    ZepGraphMemoryManager,
     AgentActivity
 )
 from .simulation_ipc import (
@@ -41,7 +41,7 @@ __all__ = [
     'OntologyGenerator', 
     'GraphBuilderService', 
     'TextProcessor',
-    'GraphitiEntityReader',
+    'ZepEntityReader',
     'EntityNode',
     'FilteredEntities',
     'OasisProfileGenerator',
@@ -60,8 +60,8 @@ __all__ = [
     'RunnerStatus',
     'AgentAction',
     'RoundSummary',
-    'GraphitiMemoryUpdater',
-    'GraphitiMemoryManager',
+    'ZepGraphMemoryUpdater',
+    'ZepGraphMemoryManager',
     'AgentActivity',
     'SimulationIPCClient',
     'SimulationIPCServer',

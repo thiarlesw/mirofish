@@ -1,8 +1,9 @@
 """
-Graphiti 实体读取与过滤服务
-从 Graphiti/Kuzu 图谱中读取节点，筛选出符合预定义实体类型的节点
+Graphiti entity reading and filtering service.
+Reads nodes from the Graphiti/Kuzu knowledge graph and filters out those that match
+predefined entity types.
 
-替代原 zep_entity_reader.py，保持相同的公共接口。
+Replaces the original zep_entity_reader.py, maintaining the same public interface.
 """
 
 import asyncio
@@ -18,19 +19,19 @@ logger = get_logger('mirofish.graphiti_entity_reader')
 T = TypeVar('T')
 
 
-# ── 数据结构（与 zep_entity_reader.py 保持完全一致）────────────────────────
+# ── Data structures (fully identical to zep_entity_reader.py) ────────────────────────
 
 @dataclass
 class EntityNode:
-    """实体节点数据结构"""
+    """Entity node data structure"""
     uuid: str
     name: str
     labels: List[str]
     summary: str
     attributes: Dict[str, Any]
-    # 相关的边信息
+    # Related edge information
     related_edges: List[Dict[str, Any]] = field(default_factory=list)
-    # 相关的其他节点信息
+    # Related node information
     related_nodes: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -45,7 +46,7 @@ class EntityNode:
         }
 
     def get_entity_type(self) -> Optional[str]:
-        """获取实体类型（排除默认的 Entity 标签）"""
+        """Get entity type (excluding default 'Entity' and 'Node' labels)"""
         for label in self.labels:
             if label not in ["Entity", "Node"]:
                 return label
@@ -54,7 +55,7 @@ class EntityNode:
 
 @dataclass
 class FilteredEntities:
-    """过滤后的实体集合"""
+    """Filtered entity collection"""
     entities: List[EntityNode]
     entity_types: Set[str]
     total_count: int
@@ -69,20 +70,20 @@ class FilteredEntities:
         }
 
 
-# ── 辅助函数：将 graphiti_core 对象转为字典 ──────────────────────────────────
+# ── Helper functions: convert graphiti_core objects to dicts ──────────────────────────────────
 
 def _node_result_to_dict(node) -> Dict[str, Any]:
     """
-    将 graphiti_core 搜索结果中的节点对象转换为标准字典格式。
+    Convert a node object from a graphiti_core search result to the standard dictionary format.
 
-    graphiti_core 的 search() 返回 SearchResult 列表，每个对象大致包含：
-      .uuid / .node_id  — 节点唯一标识
-      .name             — 节点名称
-      .labels           — 节点标签列表（部分版本使用 .entity_type）
-      .summary          — 摘要
-      .attributes       — 扩展属性字典
+    graphiti_core's search() returns a list of SearchResult objects, each roughly containing:
+      .uuid / .node_id  — unique node identifier
+      .name             — node name
+      .labels           — list of node labels (some versions use .entity_type)
+      .summary          — summary text
+      .attributes       — extended attributes dict
 
-    因为 graphiti_core 的 API 仍在演进，这里做防御性访问。
+    Defensive access is used here because graphiti_core's API is still evolving.
     """
     uuid = (
         getattr(node, 'uuid', None)
@@ -93,7 +94,7 @@ def _node_result_to_dict(node) -> Dict[str, Any]:
     name = getattr(node, 'name', '') or ''
     summary = getattr(node, 'summary', '') or getattr(node, 'fact', '') or ''
 
-    # labels：优先取 .labels 列表，退而取 .entity_type 字符串
+    # labels: prefer .labels list, fall back to .entity_type string
     raw_labels = getattr(node, 'labels', None)
     if raw_labels and isinstance(raw_labels, list):
         labels = raw_labels
@@ -114,15 +115,15 @@ def _node_result_to_dict(node) -> Dict[str, Any]:
 
 def _edge_result_to_dict(edge) -> Dict[str, Any]:
     """
-    将 graphiti_core 边对象转换为标准字典格式。
+    Convert a graphiti_core edge object to the standard dictionary format.
 
-    graphiti_core 边对象（EpisodicEdge / EntityEdge）大致包含：
-      .uuid             — 边唯一标识
-      .name / .relation — 关系名称
-      .fact             — 事实描述
-      .source_node_uuid — 源节点 UUID
-      .target_node_uuid — 目标节点 UUID
-      .attributes       — 扩展属性
+    graphiti_core edge objects (EpisodicEdge / EntityEdge) roughly contain:
+      .uuid             — unique edge identifier
+      .name / .relation — relationship name
+      .fact             — fact description
+      .source_node_uuid — source node UUID
+      .target_node_uuid — target node UUID
+      .attributes       — extended attributes
     """
     uuid = (
         getattr(edge, 'uuid', None)
@@ -158,46 +159,46 @@ def _edge_result_to_dict(edge) -> Dict[str, Any]:
     }
 
 
-# ── 主类 ─────────────────────────────────────────────────────────────────────
+# ── Main class ─────────────────────────────────────────────────────────────────────
 
 class GraphitiEntityReader:
     """
-    Graphiti 实体读取与过滤服务（替代 ZepEntityReader）
+    Graphiti entity reading and filtering service (replaces ZepEntityReader).
 
-    主要功能：
-    1. 从 Graphiti 图谱读取指定 group_id 的所有节点
-    2. 筛选出符合预定义实体类型的节点
-    3. 获取每个实体的相关边和关联节点信息
+    Core functionality:
+    1. Read all nodes for a given group_id from the Graphiti graph
+    2. Filter out nodes that match predefined entity types
+    3. Retrieve related edges and connected node information for each entity
 
-    所有方法均为 async。
+    All methods are async.
     """
 
     def __init__(self):
         """
-        无需传入 api_key；通过 get_graphiti() 单例获取客户端。
+        No api_key needed; the client is obtained via the get_graphiti() singleton.
         """
         pass
 
     async def get_all_nodes(self, group_id: str) -> List[Dict[str, Any]]:
         """
-        获取指定 group_id 的所有节点。
+        Get all nodes for a given group_id.
 
         Args:
-            group_id: 图谱分组 ID（对应原 Zep 的 graph_id）
+            group_id: Graph group ID (corresponds to the original Zep graph_id)
 
         Returns:
-            节点字典列表
+            List of node dictionaries
         """
-        logger.info(f"获取 group_id={group_id} 的所有节点...")
+        logger.info(f"Fetching all nodes for group_id={group_id}...")
 
         graphiti = await get_graphiti()
 
         nodes_data: List[Dict[str, Any]] = []
 
         try:
-            # graphiti_core 的 search() 支持 group_ids 过滤。
-            # 使用空字符串查询以获取所有节点；num_results 设置较大值。
-            # TODO: 如果 graphiti_core 提供专用的 list_nodes() 接口，优先使用它。
+            # graphiti_core's search() supports group_ids filtering.
+            # Use an empty string query to retrieve all nodes; num_results is set large.
+            # TODO: If graphiti_core provides a dedicated list_nodes() interface, prefer that.
             results = await graphiti.search(
                 query='',
                 group_ids=[group_id],
@@ -205,32 +206,32 @@ class GraphitiEntityReader:
             )
 
             for result in results:
-                # search() 可能返回节点或边的混合结果，仅保留节点
-                # graphiti_core SearchResult 通常有 .node 属性
+                # search() may return a mix of nodes and edges; keep only nodes.
+                # graphiti_core SearchResult typically has a .node attribute
                 node_obj = getattr(result, 'node', result)
                 nodes_data.append(_node_result_to_dict(node_obj))
 
         except Exception as e:
-            logger.error(f"查询 Graphiti 节点失败 (group_id={group_id}): {e}")
-            # 回退：尝试通过底层 driver 直接查询
+            logger.error(f"Failed to query Graphiti nodes (group_id={group_id}): {e}")
+            # Fallback: try querying via the underlying driver directly
             try:
                 nodes_data = await self._query_nodes_via_driver(graphiti, group_id)
             except Exception as e2:
-                logger.error(f"通过 driver 查询节点也失败: {e2}")
+                logger.error(f"Driver-based node query also failed: {e2}")
 
-        logger.info(f"共获取 {len(nodes_data)} 个节点 (group_id={group_id})")
+        logger.info(f"Retrieved {len(nodes_data)} nodes total (group_id={group_id})")
         return nodes_data
 
     async def _query_nodes_via_driver(
         self, graphiti, group_id: str
     ) -> List[Dict[str, Any]]:
         """
-        通过 graphiti_core 底层 driver 直接执行 Kuzu 查询获取节点。
+        Query nodes directly via the graphiti_core underlying driver (Kuzu query).
 
-        TODO: 根据实际 graphiti_core 版本调整查询语法。
+        TODO: Adjust query syntax based on the actual graphiti_core version.
         """
-        # Kuzu 的 Cypher 查询示例
-        # TODO: 验证 graphiti_core KuzuDriver 的 execute() 方法签名
+        # Kuzu Cypher query example
+        # TODO: Verify the execute() method signature for the graphiti_core KuzuDriver
         cypher = (
             "MATCH (n:Entity) WHERE n.group_id = $group_id "
             "RETURN n.uuid AS uuid, n.name AS name, n.summary AS summary, "
@@ -255,37 +256,37 @@ class GraphitiEntityReader:
 
     async def get_all_edges(self, group_id: str) -> List[Dict[str, Any]]:
         """
-        获取指定 group_id 的所有边。
+        Get all edges for a given group_id.
 
         Args:
-            group_id: 图谱分组 ID
+            group_id: Graph group ID
 
         Returns:
-            边字典列表
+            List of edge dictionaries
         """
-        logger.info(f"获取 group_id={group_id} 的所有边...")
+        logger.info(f"Fetching all edges for group_id={group_id}...")
 
         graphiti = await get_graphiti()
         edges_data: List[Dict[str, Any]] = []
 
         try:
-            # TODO: 如果 graphiti_core 提供专用的 get_edges() 接口，优先使用它。
-            # 当前通过底层 driver 查询所有 EntityEdge。
+            # TODO: If graphiti_core provides a dedicated get_edges() interface, prefer that.
+            # Currently querying all EntityEdges via the underlying driver.
             edges_data = await self._query_edges_via_driver(graphiti, group_id)
 
         except Exception as e:
-            logger.error(f"查询 Graphiti 边失败 (group_id={group_id}): {e}")
+            logger.error(f"Failed to query Graphiti edges (group_id={group_id}): {e}")
 
-        logger.info(f"共获取 {len(edges_data)} 条边 (group_id={group_id})")
+        logger.info(f"Retrieved {len(edges_data)} edges total (group_id={group_id})")
         return edges_data
 
     async def _query_edges_via_driver(
         self, graphiti, group_id: str
     ) -> List[Dict[str, Any]]:
         """
-        通过底层 driver 查询边数据。
+        Query edge data via the underlying driver.
 
-        TODO: 根据实际 graphiti_core schema 调整查询。
+        TODO: Adjust the query based on the actual graphiti_core schema.
         """
         cypher = (
             "MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity) "
@@ -309,7 +310,7 @@ class GraphitiEntityReader:
                 for row in rows
             ]
         except Exception as e:
-            logger.warning(f"driver 边查询失败: {e}")
+            logger.warning(f"Driver edge query failed: {e}")
             return []
 
     async def filter_defined_entities(
@@ -319,29 +320,29 @@ class GraphitiEntityReader:
         enrich_with_edges: bool = True,
     ) -> FilteredEntities:
         """
-        筛选出符合预定义实体类型的节点。
+        Filter out nodes that match predefined entity types.
 
-        筛选逻辑（与原 ZepEntityReader 完全一致）：
-        - 节点的 labels 只有 "Entity" / "Node" → 跳过
-        - 节点包含除 "Entity" / "Node" 之外的自定义标签 → 保留
-        - 若 defined_entity_types 非空，则仅保留匹配的类型
+        Filtering logic (identical to the original ZepEntityReader):
+        - Nodes whose labels contain only "Entity" / "Node" are skipped
+        - Nodes that contain custom labels beyond "Entity" / "Node" are kept
+        - If defined_entity_types is non-empty, only matching types are kept
 
         Args:
-            group_id: 图谱分组 ID
-            defined_entity_types: 预定义实体类型列表（可选）
-            enrich_with_edges: 是否获取每个实体的相关边信息
+            group_id: Graph group ID
+            defined_entity_types: List of predefined entity types (optional)
+            enrich_with_edges: Whether to retrieve related edge information for each entity
 
         Returns:
             FilteredEntities
         """
-        logger.info(f"开始筛选 group_id={group_id} 的实体...")
+        logger.info(f"Starting entity filtering for group_id={group_id}...")
 
         all_nodes = await self.get_all_nodes(group_id)
         total_count = len(all_nodes)
 
         all_edges = await self.get_all_edges(group_id) if enrich_with_edges else []
 
-        # 构建 UUID → 节点数据的映射
+        # Build UUID → node data mapping
         node_map = {n["uuid"]: n for n in all_nodes}
 
         filtered_entities: List[EntityNode] = []
@@ -350,7 +351,7 @@ class GraphitiEntityReader:
         for node in all_nodes:
             labels = node.get("labels", [])
 
-            # 筛选：Labels 必须包含除 "Entity" 和 "Node" 之外的标签
+            # Filter: labels must contain at least one label other than "Entity" and "Node"
             custom_labels = [lb for lb in labels if lb not in ("Entity", "Node")]
 
             if not custom_labels:
@@ -413,8 +414,8 @@ class GraphitiEntityReader:
             filtered_entities.append(entity)
 
         logger.info(
-            f"筛选完成: 总节点 {total_count}, 符合条件 {len(filtered_entities)}, "
-            f"实体类型: {entity_types_found}"
+            f"Filtering complete: total nodes {total_count}, matching {len(filtered_entities)}, "
+            f"entity types: {entity_types_found}"
         )
 
         return FilteredEntities(
@@ -430,19 +431,19 @@ class GraphitiEntityReader:
         entity_name: str,
     ) -> Optional[EntityNode]:
         """
-        按名称搜索单个实体及其完整上下文（边和关联节点）。
+        Search for a single entity by name and retrieve its full context (edges and connected nodes).
 
-        原 ZepEntityReader 使用 UUID 查询；Graphiti 以语义搜索为主，
-        因此这里改为按名称搜索，取最匹配的第一条结果。
+        The original ZepEntityReader used UUID-based lookup; Graphiti relies on semantic search,
+        so this method searches by name and takes the best-matching first result.
 
         Args:
-            group_id: 图谱分组 ID
-            entity_name: 实体名称（用于语义搜索）
+            group_id: Graph group ID
+            entity_name: Entity name (used for semantic search)
 
         Returns:
-            EntityNode 或 None
+            EntityNode or None
         """
-        logger.info(f"搜索实体: group_id={group_id}, entity_name={entity_name}")
+        logger.info(f"Searching for entity: group_id={group_id}, entity_name={entity_name}")
 
         graphiti = await get_graphiti()
 
@@ -454,24 +455,24 @@ class GraphitiEntityReader:
             )
 
             if not results:
-                logger.info(f"未找到实体: {entity_name}")
+                logger.info(f"Entity not found: {entity_name}")
                 return None
 
-            # 取最相关的第一条
+            # Take the most relevant first result
             node_obj = getattr(results[0], 'node', results[0])
             node = _node_result_to_dict(node_obj)
             entity_uuid = node["uuid"]
 
         except Exception as e:
-            logger.error(f"搜索实体 '{entity_name}' 失败: {e}")
+            logger.error(f"Failed to search for entity '{entity_name}': {e}")
             return None
 
-        # 获取该实体的所有边和节点
+        # Retrieve all edges and nodes for this entity
         try:
             all_nodes = await self.get_all_nodes(group_id)
             all_edges = await self.get_all_edges(group_id)
         except Exception as e:
-            logger.error(f"获取实体上下文失败: {e}")
+            logger.error(f"Failed to retrieve entity context: {e}")
             return None
 
         node_map = {n["uuid"]: n for n in all_nodes}
@@ -525,15 +526,15 @@ class GraphitiEntityReader:
         enrich_with_edges: bool = True,
     ) -> List[EntityNode]:
         """
-        获取指定类型的所有实体。
+        Get all entities of a specific type.
 
         Args:
-            group_id: 图谱分组 ID
-            entity_type: 实体类型（如 "Student", "PublicFigure" 等）
-            enrich_with_edges: 是否获取相关边信息
+            group_id: Graph group ID
+            entity_type: Entity type (e.g., "Student", "PublicFigure")
+            enrich_with_edges: Whether to retrieve related edge information
 
         Returns:
-            实体列表
+            List of entities
         """
         result = await self.filter_defined_entities(
             group_id=group_id,
