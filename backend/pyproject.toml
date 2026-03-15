@@ -9,7 +9,10 @@ authors = [
 ]
 
 dependencies = [
-    # 核心框架
+    # Security (Aikido Zen WAF)
+    "aikido_zen>=1.0.0",
+
+    # Core framework
     "flask>=3.0.0",
     "flask-cors>=6.0.0",
     

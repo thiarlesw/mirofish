@@ -1,6 +1,8 @@
 """
-MiroFish Backend 启动入口
+MiroFish Backend entry point
 """
+
+import aikido_zen  # noqa: F401 — must be first import for WAF to work
 
 import os
 import sys
