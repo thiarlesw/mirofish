@@ -8,7 +8,8 @@ import os
 from typing import Optional
 
 from graphiti_core import Graphiti
-from graphiti_core.llm_client.gemini_client import GeminiClient, GeminiConfig
+from graphiti_core.llm_client.gemini_client import GeminiClient
+from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig
 
 from ..config import Config
@@ -86,7 +87,7 @@ async def get_graphiti() -> Graphiti:
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY 或 LLM_API_KEY 未配置")
 
-        llm_config = GeminiConfig(model=llm_model, api_key=gemini_api_key)
+        llm_config = LLMConfig(model=llm_model, api_key=gemini_api_key)
         llm_client = GeminiClient(config=llm_config)
 
         # ── GeminiEmbedder ─────────────────────────────────────────────────
