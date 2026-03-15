@@ -32,8 +32,10 @@ class Config:
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'gpt-4o-mini')
     
-    # Zep配置
-    ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
+    # Graphiti + Gemini (substitui Zep Cloud)
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+    GRAPHITI_LLM_MODEL = os.environ.get('GRAPHITI_LLM_MODEL', 'gemini-2.0-flash')
+    GRAPHITI_DB_PATH = os.environ.get('GRAPHITI_DB_PATH', './data/graphiti_db')
     
     # 文件上传配置
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
@@ -69,7 +71,7 @@ class Config:
         errors = []
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY 未配置")
-        if not cls.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY 未配置")
+        if not cls.GEMINI_API_KEY:
+            errors.append("GEMINI_API_KEY 未配置")
         return errors
 

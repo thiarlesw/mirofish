@@ -284,8 +284,8 @@ def build_graph():
         
         # 检查配置
         errors = []
-        if not Config.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY未配置")
+        if not Config.GEMINI_API_KEY:
+            errors.append("GEMINI_API_KEY未配置")
         if errors:
             logger.error(f"配置错误: {errors}")
             return jsonify({
@@ -382,7 +382,7 @@ def build_graph():
                 )
                 
                 # 创建图谱构建服务
-                builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+                builder = GraphBuilderService(api_key=Config.GEMINI_API_KEY)
                 
                 # 分块
                 task_manager.update_task(
@@ -400,7 +400,7 @@ def build_graph():
                 # 创建图谱
                 task_manager.update_task(
                     task_id,
-                    message="创建Zep图谱...",
+                    message="创建Graphiti图谱...",
                     progress=10
                 )
                 graph_id = builder.create_graph(name=graph_name)
@@ -439,10 +439,10 @@ def build_graph():
                     progress_callback=add_progress_callback
                 )
                 
-                # 等待Zep处理完成（查询每个episode的processed状态）
+                # 等待Graphiti处理完成（查询每个episode的processed状态）
                 task_manager.update_task(
                     task_id,
-                    message="等待Zep处理数据...",
+                    message="等待Graphiti处理数据...",
                     progress=55
                 )
                 
@@ -567,13 +567,13 @@ def get_graph_data(graph_id: str):
     获取图谱数据（节点和边）
     """
     try:
-        if not Config.ZEP_API_KEY:
+        if not Config.GEMINI_API_KEY:
             return jsonify({
                 "success": False,
-                "error": "ZEP_API_KEY未配置"
+                "error": "GEMINI_API_KEY未配置"
             }), 500
-        
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+
+        builder = GraphBuilderService(api_key=Config.GEMINI_API_KEY)
         graph_data = builder.get_graph_data(graph_id)
         
         return jsonify({
@@ -595,13 +595,13 @@ def delete_graph(graph_id: str):
     删除Zep图谱
     """
     try:
-        if not Config.ZEP_API_KEY:
+        if not Config.GEMINI_API_KEY:
             return jsonify({
                 "success": False,
-                "error": "ZEP_API_KEY未配置"
+                "error": "GEMINI_API_KEY未配置"
             }), 500
-        
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+
+        builder = GraphBuilderService(api_key=Config.GEMINI_API_KEY)
         builder.delete_graph(graph_id)
         
         return jsonify({

@@ -1,14 +1,49 @@
 services:
-  mirofish:
-    image: ghcr.io/666ghj/mirofish:latest
-    # 加速镜像（如拉取缓慢可替换上方地址）
-    # image: ghcr.nju.edu.cn/666ghj/mirofish:latest
-    container_name: mirofish
-    env_file:
-      - .env
-    ports:
-      - "3000:3000"
-      - "5001:5001"
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    container_name: mirofish-backend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5001:5001"
     volumes:
       - ./backend/uploads:/app/backend/uploads
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - FLASK_DEBUG=false
+      - GRAPHITI_DB_PATH=/app/data/graphiti_db
+    command: ["sh", "-c", "cd /app/backend && uv run python run.py"]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    container_name: mirofish-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3010:3000"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_BASE_URL=http://backend:5001
+    command: ["sh", "-c", "cd /app && npm run dev --prefix frontend -- --host 0.0.0.0 --port 3000"]
+
+  mcp:
+    build:
+      context: ./mcp_server
+      network: host
+    container_name: mirofish-mcp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    environment:
+      - MIROFISH_BASE_URL=http://backend:5001
