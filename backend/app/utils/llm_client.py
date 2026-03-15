@@ -1,37 +1,82 @@
 """
 LLM client wrapper.
 Uses OpenAI-compatible API format.
+
+Fallback chain: primary models (DashScope/Qwen) → Gemini as last resort.
+Configure via env vars:
+  LLM_API_KEY        — DashScope API key
+  LLM_BASE_URL       — DashScope base URL
+  LLM_MODEL_NAME     — primary model (e.g. qwen-plus)
+  LLM_FALLBACK_MODELS — comma-separated extra models on same provider (e.g. qwen-turbo)
+  LLM_GEMINI_FALLBACK — Gemini model as last resort (uses GEMINI_API_KEY)
 """
 
 import json
 import re
-from typing import Optional, Dict, Any, List
-from openai import OpenAI
+import logging
+from typing import Optional, Dict, Any, List, Tuple
+from openai import OpenAI, RateLimitError, APIError
 
 from ..config import Config
 
+logger = logging.getLogger('mirofish.llm_client')
+
+_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
+
 
 class LLMClient:
-    """LLM client."""
-    
+    """LLM client with multi-provider fallback support."""
+
     def __init__(
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None
     ):
-        self.api_key = api_key or Config.LLM_API_KEY
-        self.base_url = base_url or Config.LLM_BASE_URL
-        self.model = model or Config.LLM_MODEL_NAME
-        
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY is not configured")
-        
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
+        self.primary_model = model or Config.LLM_MODEL_NAME
+
+        # Primary client (DashScope or whatever LLM_BASE_URL points to)
+        self._primary_client = OpenAI(
+            api_key=api_key or Config.LLM_API_KEY,
+            base_url=base_url or Config.LLM_BASE_URL,
         )
-    
+
+        # Gemini client as last-resort fallback
+        self._gemini_client = None
+        self._gemini_model = Config.LLM_GEMINI_FALLBACK
+        if self._gemini_model and Config.GEMINI_API_KEY:
+            self._gemini_client = OpenAI(
+                api_key=Config.GEMINI_API_KEY,
+                base_url=_GEMINI_BASE_URL,
+            )
+
+        self.fallback_models = Config.LLM_FALLBACK_MODELS
+
+        if not (api_key or Config.LLM_API_KEY):
+            raise ValueError("LLM_API_KEY is not configured")
+
+    @property
+    def model(self) -> str:
+        return self.primary_model
+
+    def _chain(self) -> List[Tuple[OpenAI, str]]:
+        """Returns ordered list of (client, model) to try."""
+        entries = [(self._primary_client, self.primary_model)]
+        for m in self.fallback_models:
+            if m != self.primary_model:
+                entries.append((self._primary_client, m))
+        if self._gemini_client and self._gemini_model:
+            entries.append((self._gemini_client, self._gemini_model))
+        return entries
+
+    def _call(self, client: OpenAI, model: str, **kwargs) -> str:
+        kwargs["model"] = model
+        response = client.chat.completions.create(**kwargs)
+        content = response.choices[0].message.content
+        # Some models (e.g. MiniMax M2.5) include <think>...</think> in content; strip it
+        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+        return content
+
     def chat(
         self,
         messages: List[Dict[str, str]],
@@ -39,22 +84,25 @@ class LLMClient:
         max_tokens: int = 4096,
         response_format: Optional[Dict] = None
     ) -> str:
-        """Send chat request. Args: messages, temperature, max_tokens, response_format. Returns response text."""
-        kwargs = {
-            "model": self.model,
+        """Send chat request with automatic provider/model fallback."""
+        kwargs: Dict[str, Any] = {
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        
         if response_format:
             kwargs["response_format"] = response_format
-        
-        response = self.client.chat.completions.create(**kwargs)
-        content = response.choices[0].message.content
-        # Some models (e.g. MiniMax M2.5) include <think>...</think> in content; strip it
-        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
-        return content
+
+        chain = self._chain()
+        last_error = None
+        for client, model in chain:
+            try:
+                return self._call(client, model, **kwargs)
+            except (RateLimitError, APIError) as e:
+                last_error = e
+                if (client, model) != chain[-1]:
+                    logger.warning(f"Model {model} failed ({type(e).__name__}), trying next fallback")
+        raise last_error
     
     def chat_json(
         self,

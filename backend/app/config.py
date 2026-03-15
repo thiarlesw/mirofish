@@ -25,10 +25,17 @@ class Config:
     # JSON: disable ASCII escape so Unicode displays as-is
     JSON_AS_ASCII = False
     
-    # LLM (OpenAI-compatible)
-    LLM_API_KEY = os.environ.get('LLM_API_KEY')
-    LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
-    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'gpt-4o-mini')
+    # LLM primary (DashScope/Qwen by default)
+    LLM_API_KEY = os.environ.get('LLM_API_KEY') or os.environ.get('DASHSCOPE_API_KEY')
+    LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'qwen-plus')
+    # Additional fallback models on the same provider (comma-separated)
+    LLM_FALLBACK_MODELS = [
+        m.strip() for m in os.environ.get('LLM_FALLBACK_MODELS', 'qwen-turbo').split(',') if m.strip()
+    ]
+    # Last-resort Gemini fallback (uses GEMINI_API_KEY)
+    LLM_GEMINI_FALLBACK = os.environ.get('LLM_GEMINI_FALLBACK', 'gemini-2.5-flash-lite')
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
     
     # Zep
     ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
