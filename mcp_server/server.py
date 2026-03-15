@@ -372,10 +372,10 @@ async def generate_report(
 
 
 if __name__ == "__main__":
-    import uvicorn
+    import asyncio
 
-    # Streamable HTTP transport: compatível com Cloudflare e Claude.ai connector.
-    # Expõe /mcp como endpoint único (POST para requests, GET para stream SSE).
-    app = mcp.streamable_http_app()
+    port = int(os.environ.get("PORT", "8765"))
+    mcp.settings.host = "0.0.0.0"
+    mcp.settings.port = port
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8765")))
+    asyncio.run(mcp.run_streamable_http_async())
