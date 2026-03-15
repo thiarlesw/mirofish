@@ -17,7 +17,7 @@ from ..utils.logger import get_logger
 
 logger = get_logger('mirofish.graphiti_client')
 
-_DEFAULT_LLM_MODEL = 'gemini-2.0-flash'
+_DEFAULT_LLM_MODEL = 'gemini-2.5-flash-lite'
 _DEFAULT_DB_PATH = './data/graphiti_db'
 _DEFAULT_EMBEDDING_MODEL = 'gemini-embedding-001'
 _EMBEDDING_DIM = 3072
