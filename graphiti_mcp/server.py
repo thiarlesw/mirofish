@@ -14,6 +14,7 @@ from typing import Optional
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -91,6 +92,9 @@ mcp = FastMCP(
         "MCP com acesso direto ao grafo Graphiti da série de livros. "
         "Use graphiti_add_episode para adicionar conteúdo, graphiti_search para buscar, "
         "graphiti_list_nodes/edges para explorar o grafo, e graphiti_delete_* para remover."
+    ),
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
     ),
 )
 mcp.settings.host = "0.0.0.0"
@@ -236,7 +240,56 @@ async def graphiti_delete_episode(uuid: str) -> dict:
     return _api("delete", f"/episode/{uuid}")
 
 
-# ─── Health ───────────────────────────────────────────────────────────────────
+@mcp.tool()
+async def graphiti_list_episodes(
+    group_id: str,
+    limit: int = 100,
+) -> dict:
+    """
+    Lista todos os episódios (chunks de texto) de um group_id.
+    Cada episódio é um trecho que foi processado e originou nós/arestas.
+
+    - group_id: grupo a listar (ex: 'falta', 'sede', 'mirofish_abc123')
+    - limit: máximo de episódios (default 100)
+    """
+    return _api("get", f"/episodes/{group_id}", params={"limit": limit})
+
+
+@mcp.tool()
+async def graphiti_delete_group(group_id: str) -> dict:
+    """
+    Deleta TODOS os dados de um group_id — nós, arestas e episódios.
+    Use para remover um livro/projeto inteiro do grafo.
+    ATENÇÃO: irreversível.
+
+    - group_id: grupo a deletar (ex: 'falta', 'sede')
+    """
+    return _api("delete", f"/group/{group_id}")
+
+
+@mcp.tool()
+async def graphiti_bulk_add_episodes(
+    group_id: str,
+    episodes: list[dict],
+) -> dict:
+    """
+    Adiciona múltiplos episódios de uma vez — ideal para ingestão de livro completo.
+    O Graphiti processa cada episódio e extrai entidades/relações automaticamente.
+
+    - group_id: identificador do livro/projeto (ex: 'falta', 'sede', 'livro3')
+    - episodes: lista de { name, content, source_description? }
+      Exemplo:
+        [
+          { "name": "Cap 01 - Lucas", "content": "texto completo do capítulo..." },
+          { "name": "Cap 02 - Enzo",  "content": "texto completo do capítulo..." }
+        ]
+
+    Retorna status de cada episódio individualmente.
+    """
+    return _api("post", "/episode/bulk", json={"group_id": group_id, "episodes": episodes})
+
+
+# ─── Health & OAuth Discovery ─────────────────────────────────────────────────
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request):
@@ -246,6 +299,29 @@ async def health(request):
         return JSONResponse({"status": "ok", "groups": result.get("total", 0)})
     except Exception as e:
         return JSONResponse({"status": "degraded", "error": str(e)}, status_code=503)
+
+
+@mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])
+async def oauth_protected_resource(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({
+        "resource": "https://mcptracker.rebote.cc",
+        "authorization_servers": ["https://auth.rebote.cc"],
+    })
+
+
+@mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
+async def oauth_authorization_server(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({
+        "issuer": "https://auth.rebote.cc",
+        "authorization_endpoint": "https://auth.rebote.cc/authorize",
+        "token_endpoint": "https://auth.rebote.cc/token",
+        "registration_endpoint": "https://auth.rebote.cc/register",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code"],
+        "code_challenge_methods_supported": ["S256"],
+    })
 
 
 # ─── Entrypoint ───────────────────────────────────────────────────────────────
