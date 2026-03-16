@@ -314,9 +314,10 @@ class GraphitiEntityReader:
 
     async def filter_defined_entities(
         self,
-        group_id: str,
+        group_id: str = None,
         defined_entity_types: Optional[List[str]] = None,
         enrich_with_edges: bool = True,
+        graph_id: str = None,  # alias for group_id (legacy callers)
     ) -> FilteredEntities:
         """
         筛选出符合预定义实体类型的节点。
@@ -334,6 +335,8 @@ class GraphitiEntityReader:
         Returns:
             FilteredEntities
         """
+        if graph_id and not group_id:
+            group_id = graph_id
         logger.info(f"开始筛选 group_id={group_id} 的实体...")
 
         all_nodes = await self.get_all_nodes(group_id)

@@ -4,6 +4,8 @@ OASIS模拟管理器
 使用预设脚本 + LLM智能生成配置参数
 """
 
+import asyncio
+import concurrent.futures
 import os
 import json
 import shutil
@@ -19,6 +21,20 @@ from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
 
 logger = get_logger('mirofish.simulation')
+
+
+def _run_async(coro):
+    """Run async coroutine from sync context (Flask-compatible)."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, coro)
+                return future.result()
+        else:
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
 
 
 class SimulationStatus(str, Enum):
@@ -277,11 +293,11 @@ class SimulationManager:
             if progress_callback:
                 progress_callback("reading", 30, "正在读取节点数据...")
             
-            filtered = reader.filter_defined_entities(
+            filtered = _run_async(reader.filter_defined_entities(
                 graph_id=state.graph_id,
                 defined_entity_types=defined_entity_types,
-                enrich_with_edges=True
-            )
+                enrich_with_edges=True,
+            ))
             
             state.entities_count = filtered.filtered_count
             state.entity_types = list(filtered.entity_types)

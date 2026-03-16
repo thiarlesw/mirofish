@@ -3,6 +3,8 @@
 Step2: Zep实体读取与过滤、OASIS模拟准备与运行（全程自动化）
 """
 
+import asyncio
+import concurrent.futures
 import os
 import traceback
 from flask import request, jsonify, send_file
@@ -17,6 +19,20 @@ from ..utils.logger import get_logger
 from ..models.project import ProjectManager
 
 logger = get_logger('mirofish.api.simulation')
+
+
+def _run_async(coro):
+    """Run async coroutine from sync Flask context."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, coro)
+                return future.result()
+        else:
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
 
 
 # Interview prompt 优化前缀
@@ -69,12 +85,12 @@ def get_graph_entities(graph_id: str):
         logger.info(f"获取图谱实体: graph_id={graph_id}, entity_types={entity_types}, enrich={enrich}")
         
         reader = GraphitiEntityReader()
-        result = reader.filter_defined_entities(
+        result = _run_async(reader.filter_defined_entities(
             graph_id=graph_id,
             defined_entity_types=entity_types,
-            enrich_with_edges=enrich
-        )
-        
+            enrich_with_edges=enrich,
+        ))
+
         return jsonify({
             "success": True,
             "data": result.to_dict()
@@ -473,11 +489,11 @@ def prepare_simulation():
             logger.info(f"同步获取实体数量: graph_id={state.graph_id}")
             reader = GraphitiEntityReader()
             # 快速读取实体（不需要边信息，只统计数量）
-            filtered_preview = reader.filter_defined_entities(
+            filtered_preview = _run_async(reader.filter_defined_entities(
                 graph_id=state.graph_id,
                 defined_entity_types=entity_types_list,
-                enrich_with_edges=False  # 不获取边信息，加快速度
-            )
+                enrich_with_edges=False,
+            ))
             # 保存实体数量到状态（供前端立即获取）
             state.entities_count = filtered_preview.filtered_count
             state.entity_types = list(filtered_preview.entity_types)
@@ -1397,12 +1413,12 @@ def generate_profiles():
         platform = data.get('platform', 'reddit')
         
         reader = GraphitiEntityReader()
-        filtered = reader.filter_defined_entities(
+        filtered = _run_async(reader.filter_defined_entities(
             graph_id=graph_id,
             defined_entity_types=entity_types,
-            enrich_with_edges=True
-        )
-        
+            enrich_with_edges=True,
+        ))
+
         if filtered.filtered_count == 0:
             return jsonify({
                 "success": False,
