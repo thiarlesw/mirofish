@@ -15,7 +15,7 @@ services:
       - .env
     environment:
       - FLASK_DEBUG=false
-      - GRAPHITI_DB_PATH=/app/data/graphiti_db
+      - GRAPHITI_DB_PATH=/app/data/graphiti.db
     command: ["sh", "-c", "cd /app/backend && uv run python run.py"]
 
   frontend:
