@@ -1,14 +1,95 @@
 """
 MiroFish MCP Server
 Expõe as funcionalidades do MiroFish como tools MCP para Claude e outros clientes.
+Com autenticação JWT OAuth 2.1.
 """
+
+import base64
+import hashlib
+import hmac
+import json
 import os
+import time
+from typing import Optional
+
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 import httpx
-from typing import Optional
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+# ─── Configuração de Autenticação JWT ─────────────────────────────────
+
+ISSUER = "https://auth.rebote.cc"
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
 
 MIROFISH_BASE_URL = os.environ.get("MIROFISH_BASE_URL", "http://localhost:5001")
+
+
+def _b64decode_padding(s: str) -> bytes:
+    """Decodifica base64url com padding automático."""
+    s += "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s)
+
+
+def verify_jwt(token: str) -> bool:
+    """Valida JWT assinado com HMAC-SHA256 (compatível com Worker Cloudflare)."""
+    if not JWT_SECRET or not token:
+        return False
+    try:
+        header_b64, payload_b64, sig_b64 = token.split(".")
+        expected_sig = (
+            base64.urlsafe_b64encode(
+                hmac.new(
+                    JWT_SECRET.encode(),
+                    f"{header_b64}.{payload_b64}".encode(),
+                    hashlib.sha256,
+                ).digest()
+            )
+            .rstrip(b"=")
+            .decode()
+        )
+        if not hmac.compare_digest(sig_b64, expected_sig):
+            return False
+        payload = json.loads(_b64decode_padding(payload_b64))
+        if payload.get("exp", 0) < time.time():
+            return False
+        if payload.get("iss") != ISSUER:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+class MCPAuthMiddleware(BaseHTTPMiddleware):
+    """Middleware para proteger rotas MCP com JWT."""
+
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        # Rotas públicas (obrigatórias para OAuth discovery)
+        if path.startswith("/.well-known"):
+            return await call_next(request)
+        # Validar Bearer token
+        auth_header = request.headers.get("Authorization", "")
+        token = (
+            auth_header.removeprefix("Bearer ").strip()
+            if auth_header.startswith("Bearer ")
+            else auth_header.strip()
+        )
+        if not verify_jwt(token):
+            return JSONResponse(
+                status_code=401,
+                content={"error": "unauthorized"},
+                headers={
+                    "WWW-Authenticate": (
+                        'Bearer resource_metadata="https://auth.rebote.cc/.well-known/oauth-protected-resource"'
+                    )
+                },
+            )
+        return await call_next(request)
+
+
+# ─── Fim da configuração JWT ──────────────────────────────────────────
 
 mcp = FastMCP(
     "MiroFish",
@@ -27,11 +108,14 @@ mcp = FastMCP(
 
 # ============== Projetos ==============
 
+
 @mcp.tool()
 async def list_projects(limit: int = 50) -> dict:
     """Lista todos os projetos de simulação MiroFish."""
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(f"{MIROFISH_BASE_URL}/api/graph/project/list", params={"limit": limit})
+        r = await client.get(
+            f"{MIROFISH_BASE_URL}/api/graph/project/list", params={"limit": limit}
+        )
         return r.json()
 
 
@@ -96,6 +180,7 @@ async def create_project(
 
 
 # ============== Grafo de Conhecimento ==============
+
 
 @mcp.tool()
 async def build_knowledge_graph(
@@ -182,11 +267,7 @@ async def query_knowledge_graph(
             params=params,
         )
         data = r.json()
-        if (
-            data.get("success")
-            and "data" in data
-            and "entities" in data["data"]
-        ):
+        if data.get("success") and "data" in data and "entities" in data["data"]:
             entities = data["data"]["entities"]
             if len(entities) > num_results:
                 data["data"]["entities"] = entities[:num_results]
@@ -196,6 +277,7 @@ async def query_knowledge_graph(
 
 
 # ============== Simulação ==============
+
 
 @mcp.tool()
 async def list_simulations(
@@ -257,7 +339,9 @@ async def create_simulation(
         }
         if graph_id:
             payload["graph_id"] = graph_id
-        r = await client.post(f"{MIROFISH_BASE_URL}/api/simulation/create", json=payload)
+        r = await client.post(
+            f"{MIROFISH_BASE_URL}/api/simulation/create", json=payload
+        )
         return r.json()
 
 
@@ -285,7 +369,9 @@ async def prepare_simulation(
             "parallel_profile_count": parallel_profile_count,
             "force_regenerate": force_regenerate,
         }
-        r = await client.post(f"{MIROFISH_BASE_URL}/api/simulation/prepare", json=payload)
+        r = await client.post(
+            f"{MIROFISH_BASE_URL}/api/simulation/prepare", json=payload
+        )
         return r.json()
 
 
@@ -344,7 +430,9 @@ async def get_simulation_status(simulation_id: str) -> dict:
         simulation_id: ID da simulação
     """
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(f"{MIROFISH_BASE_URL}/api/simulation/{simulation_id}/run-status")
+        r = await client.get(
+            f"{MIROFISH_BASE_URL}/api/simulation/{simulation_id}/run-status"
+        )
         return r.json()
 
 
@@ -457,6 +545,7 @@ async def interview_all_agents(simulation_id: str, message: str) -> dict:
 
 # ============== Relatório ==============
 
+
 @mcp.tool()
 async def generate_report(
     simulation_id: str,
@@ -489,7 +578,9 @@ async def get_report(simulation_id: str) -> dict:
         simulation_id: ID da simulação com relatório gerado
     """
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(f"{MIROFISH_BASE_URL}/api/report/by-simulation/{simulation_id}")
+        r = await client.get(
+            f"{MIROFISH_BASE_URL}/api/report/by-simulation/{simulation_id}"
+        )
         return r.json()
 
 
@@ -530,8 +621,36 @@ async def chat_with_report(
         return r.json()
 
 
+# ─── OAuth 2.1 Discovery Endpoint ─────────────────────────────────────
+
+
+@mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])
+async def oauth_protected_resource(request):
+    """Endpoint de discovery OAuth 2.1 (obrigatório pelo MCP spec)."""
+    return JSONResponse(
+        {
+            "resource": "https://mirofish.rebote.cc",  # Ajustar quando expor publicamente
+            "authorization_servers": ["https://auth.rebote.cc"],
+        }
+    )
+
+
 if __name__ == "__main__":
     import asyncio
+
+    # Adicionar middleware de autenticação JWT
+    mcp_app = (
+        mcp._mcp_server.app
+        if hasattr(mcp, "_mcp_server")
+        else mcp._app
+        if hasattr(mcp, "_app")
+        else None
+    )
+    if mcp_app:
+        mcp_app.add_middleware(MCPAuthMiddleware)
+        print("[INFO] Middleware de autenticação JWT ativado")
+    else:
+        print("[AVISO] Não foi possível adicionar middleware - app não encontrado")
 
     port = int(os.environ.get("PORT", "8765"))
     mcp.settings.host = "0.0.0.0"
