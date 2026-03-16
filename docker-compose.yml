@@ -47,3 +47,19 @@ services:
       - backend
     environment:
       - MIROFISH_BASE_URL=http://backend:5001
+
+  graphiti-mcp:
+    build:
+      context: ./graphiti_mcp
+      network: host
+    container_name: mirofish-graphiti-mcp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8766:8766"
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    environment:
+      - MIROFISH_BACKEND_URL=http://backend:5001
+      - PORT=8766

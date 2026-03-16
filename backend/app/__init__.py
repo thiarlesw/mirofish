@@ -57,10 +57,11 @@ def create_app(config_class=Config):
         logger.debug(f"Response: {response.status_code}")
         return response
 
-    from .api import graph_bp, simulation_bp, report_bp
+    from .api import graph_bp, simulation_bp, report_bp, graphiti_crud_bp
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
+    app.register_blueprint(graphiti_crud_bp, url_prefix='/api/graphiti')
 
     @app.route('/health')
     def health():
